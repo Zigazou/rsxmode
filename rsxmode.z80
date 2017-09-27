@@ -1,0 +1,373 @@
+; Based on Brian Cadge code published Popular Computing Weekly (1984)
+
+; Some definitions
+KL_LOG_EXT:             equ 0xbcd1
+KL_L_ROM_ENABLE:        equ 0xb906
+KL_L_ROM_RESTORE:       equ 0xb90c
+KL_NEW_FAST_TICKER:     equ 0xbce0
+KL_DEL_FAST_TICKER:     equ 0xbce6
+MC_WAIT_FLYBACK:        equ 0xbd19
+SCR_SET_MODE:           equ 0xbc0e
+SCR_MODE_CLEAR:         equ 0xbdeb
+RSX_END:                equ 0
+MAX_MODES:              equ 6
+EVENT_INSTALLED:        equ 0xff
+EVENT_UNINSTALLED:      equ 0
+
+CLASS_NEAR_ADDRESS:     equ 0x1
+CLASS_EXPRESS_EVENT:    equ 0x40
+CLASS_ASYNC_EVENT:      equ 0x80
+
+    org    0xa000
+
+    ; Register our RSX commands
+    ld bc, rsx_table
+    ld hl, rsx_four_bytes
+    call KL_LOG_EXT
+
+    ; Initialize event state
+    ld a, EVENT_UNINSTALLED
+    ld (event_state), a
+
+    ; Save SCR_MODE_CLEAR vector
+    ld hl, (SCR_MODE_CLEAR + 1)
+    ld (save_smc),hl
+
+    ; Generate our fake SCR_MODE_CLEAR
+    call install_fake_smc
+
+    ret
+
+rsx_table:
+    dw rsx_names
+    jp setmo
+    jp normal
+    jp smode
+    jp border
+
+rsx_names:
+    db "SET", 'M' | 0x80
+    db "NOR", 'M' | 0x80
+    db "MOD", 'E' | 0x80
+    db "BOR", 'D' | 0x80
+    db RSX_END
+
+install_event:
+    ; Change the event state
+    ld a, EVENT_INSTALLED
+    ld (event_state), a
+
+    ; Initialize the current section number
+    ld a, 0
+    ld (current_section), a
+
+    ; Install our event as a fast ticker event
+    ld hl, event_block
+    ld b, CLASS_NEAR_ADDRESS | CLASS_ASYNC_EVENT
+    ld c, 0
+    ld de, setmo_event
+    call MC_WAIT_FLYBACK
+    jp KL_NEW_FAST_TICKER
+
+; |BORD,section,color
+; 
+border:
+    ; border requires an even number of arguments
+    bit 0, a
+    ret nz
+
+    ; border requires at least two arguments 
+    or a
+    ret z
+
+border_read_pair_arg:
+    ; Save the number of remaining arguments to process
+    push af
+
+    ; Get the screen section to modify
+    ld a, (ix + 2)
+
+    ; There are MAX_MODES sections available, ignore everything else
+    cp MAX_MODES
+    jr nc, border_next_args
+
+    ; Save the mode for the specified section
+    ld b, 0
+    ld c, a
+    ld hl, borders_table
+    add hl, bc
+    ex de, hl
+
+    ld a, (ix + 0)
+    ld hl, basic_to_hw
+    ld c, a
+    add hl, bc
+    ld a, (hl)
+    ld (de), a
+
+    ; Install events if it is not installed
+    ld a, (event_state)
+    or a
+    call z, install_event
+
+border_next_args:
+    ; Restore the number of remaining arguments pairs to process
+    pop af
+
+    ; Be ready to read next arguments pair
+    inc ix
+    inc ix
+    inc ix
+    inc ix
+
+    ; One arguments pair less
+    dec a
+    dec a
+
+    jr nz, border_read_pair_arg
+
+    ret
+
+; |SETM,section,mode
+; The |SETM command is used to set up the various sections of the screen to
+; the different modes. The top quarter of the screen is section zero, and the
+; bottom quarter is three. The mode number is as normal 0-2.
+;
+; |SETM can take any number of section settings. For example, to set the top
+; quarter of the screen to Mode 0, and the next quarter to Mode 2 you would
+; type |SETM,0,0,1,2.
+;
+; The |SETM command displays the mixed modes, but if you try printing to any
+; section the OS still thinks you are in the original mode. See |MODE.
+setmo:
+    ; setmo requires an even number of arguments
+    bit 0, a
+    ret nz
+
+    ; setmo requires at least two arguments 
+    or a
+    ret z
+
+setmo_read_pair_arg:
+    ; Save the number of remaining arguments to process
+    push af
+
+    ; Get the screen section to modify
+    ld a, (ix + 2)
+
+    ; There are MAX_MODES sections available, ignore everything else
+    cp MAX_MODES
+    jr nc, setmo_next_args
+
+    ; Save the mode for the specified section
+    ld b, 0
+    ld c, a
+    ld hl, modes_table
+    add hl, bc
+
+    ld a, (ix + 0)
+    ld (hl), a
+
+    ; Install events if it is not installed
+    ld a, (event_state)
+    or a
+    call z, install_event
+
+setmo_next_args:
+    ; Restore the number of remaining arguments pairs to process
+    pop af
+
+    ; Be ready to read next arguments pair
+    inc ix
+    inc ix
+    inc ix
+    inc ix
+
+    ; One arguments pair less
+    dec a
+    dec a
+
+    jr nz, setmo_read_pair_arg
+
+setmo_exit:
+    ret
+
+setmo_event:
+    ld a, (current_section)
+    inc a
+    ld (current_section), a
+
+    ld b, a
+    cp MAX_MODES
+    jr nz, change_mode
+
+    ; Last section has been processed, go back to the first section
+    xor a
+    ld (current_section), a
+    ld a, b
+
+change_mode:
+    dec a
+
+    push af
+
+    ; Get the mode to apply to the section
+    ld hl, modes_table
+    ld b, 0
+    ld c, a
+    add hl, bc
+    ld a, (hl)
+
+    ; Use alternate register set (usually reserved to the firmware)
+    exx
+
+    ; The screen mode is contained in the first two bytes
+    res 1, c
+    res 0, c
+    or c
+    ld c, a
+
+    ; B' is used by firmware to store the I/O address of the gate array
+    out (c), c
+
+    ; Revert back to standard register set
+    exx
+    pop af
+
+    ; Change border
+    ld hl, borders_table
+    ld b, 0
+    ld c, a
+    add hl, bc
+    ld a, (hl)
+
+    ld bc, 0x7f10
+    out (c), c
+    add 0x40
+    ld c, a
+    out (c), c
+
+    ret
+
+; |NORM,n
+; To get back to one mode and disable the fast ticker event, use the |NORM,n
+; command. This sets the whole screen to mode 'n'. It is also useful to use
+; Normal before the |SETM command as this sets up the mode for any section of
+; the screen not included in the |SETM list.
+normal:
+    ; Disable the fast ticker event
+    ld hl, event_block
+    call KL_DEL_FAST_TICKER
+
+    ld a, EVENT_UNINSTALLED
+    ld (event_state), a
+
+    ; Set all modes to the specified mode
+    ld hl, modes_table
+    ld b, MAX_MODES
+    ld a, (ix + 0)
+
+normal_all_modes:
+    ld (hl), a
+    inc hl
+    djnz normal_all_modes
+
+    ; Set the specified mode
+    call SCR_SET_MODE
+
+    ret
+
+; |MODE,n
+; This new command has been added to tell the OS what mode you want to write in.
+; 'n' being the Mode number 0 to 2. This command does exactly the same as the
+; normal mode command, except that the screen is not cleared. There is no point
+; in using mode when the mixed modes are being displayed as any new mode set up
+; will be overwritten by the fast ticker event.
+smode:
+    ; Use our version of SCR_MODE_CLEAR
+    ld hl, fake_smc
+    ld (SCR_MODE_CLEAR + 1), hl
+
+    ld a, (ix + 0)
+    call SCR_SET_MODE
+
+    ; Restore SCR_MODE_CLEAR
+    ld hl, (save_smc)
+    ld (SCR_MODE_CLEAR + 1), hl
+
+    ret
+
+; This code has been replaced since the call works only on CPC 464!
+; It is in fact a copy of the SCR_MODE_CLEAR ROM code without the part erasing
+; the screen. Fortunately, the routine is the same from the 464 to the 6128+
+; (with the exception of addresses).
+;fake_smc:
+;    call KL_L_ROM_ENABLE
+;    call 0x0d4f
+;    ld hl, 0
+;    call 0x0b3c
+;    jp 0x0d3c
+
+fake_smc:
+    call KL_L_ROM_ENABLE
+fake_smc_block1:
+    call 0x0000
+    ld hl, 0
+    call 0x0000
+fake_smc_block2:
+    jp 0x0000    
+
+install_fake_smc:
+    call KL_L_ROM_ENABLE
+
+    ld hl, (SCR_MODE_CLEAR + 1)
+    ld de, fake_smc_block1
+    ld bc, 9
+    ldir
+    
+    ld hl, (SCR_MODE_CLEAR + 1)
+    ld bc, 0x0017
+    add hl, bc
+    ld de, fake_smc_block2
+    ld bc, 3
+    ldir
+
+    call KL_L_ROM_RESTORE    
+    ret
+
+; Current section number
+current_section:
+    db 0
+
+; Array of 6 modes number for each 6 sections of the screen (6×1/300 = 1/50)
+modes_table:
+    db 0, 0, 0, 0, 0, 0
+
+; Array of 6 borders colors
+borders_table:
+    db 0, 0, 0, 0, 0, 0
+
+; Address of the standard SCR_MODE_CLEAR address
+save_smc:
+    dw 0
+
+; Event block used by the kernel
+event_block:
+    db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+; Four bytes used by the kernel for our RSX
+rsx_four_bytes:
+    db 0, 0, 0, 0
+
+; Indicates whether the event is installed or not
+event_state:
+    db EVENT_UNINSTALLED
+
+; Lookup table to convert Basic colors to hardware colors
+basic_to_hw:
+    db 0x14, 0x04, 0x15, 0x1c, 0x18, 0x1d, 0x0c, 0x05, 0x0d, 0x16, 0x06, 0x17
+    db 0x1e, 0x00, 0x1f, 0x0e, 0x07, 0x0f, 0x12, 0x02, 0x13, 0x1a, 0x19, 0x1b
+    db 0x0a, 0x03, 0x0b
+
+    end
+

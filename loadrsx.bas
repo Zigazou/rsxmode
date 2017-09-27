@@ -1,0 +1,5 @@
+10 'Load rsxmode.bin
+20 MEMORY &9FFF
+30 LOAD"RSXMODE.BIN"
+40 CALL &A000
+
