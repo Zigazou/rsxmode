@@ -15,6 +15,12 @@ family to run it. It is also able to change border color for each section.
 
 ![DEMORSX](rsxmode.png)
 
+In the example above:
+
+- section 0 uses mode 2, 640 pixels wide, 2 colors
+- section 1 and 2 uses mode 0, 160 pixels wide, 16 colors
+- section 3 uses mode 1, 320 pixels wide, 4 colors
+
 Requirements
 ------------
 
@@ -58,28 +64,28 @@ The sections are in this order: 5, 0, 1, 2, 3, 4.
 Sections 4 and 5 are not usable but you can still change the border for them.
 They aren't usable because they are outside of the standard drawing zone.
 
-*** SETM
+### SETM
 
 Set the mode for each section. This RSX requires and even number of
 arguments.
 
     |SETM,section,mode,section,mode...
 
-*** BORD
+### BORD
 
 Set the border color for each section. This RSX requires and even number of
 arguments.
 
     |BORD,section,color,section,color...
 
-*** MODE
+### MODE
 
 Tells the Amstrad CPC in which mode the Basic commands must work. Patching
 Basic to detect in which mode it should operate is beyond my knowledges :-)
 
     |MODE,mode
 
-*** NORM
+### NORM
 
 Disable the multi-modes mode and return to a standard mode.
 

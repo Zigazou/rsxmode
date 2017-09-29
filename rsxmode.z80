@@ -1,4 +1,7 @@
 ; Based on Brian Cadge code published Popular Computing Weekly (1984)
+; https://cpcrulez.fr/coding_src-list-RSX-mix_your_modes_POPU.htm
+; Added support for 664, 6128 and the plus family
+; Added support for changing border colors on section boundaries
 
 ; Some definitions
 KL_LOG_EXT:             equ 0xbcd1
@@ -194,22 +197,9 @@ setmo_exit:
 
 setmo_event:
     ld a, (current_section)
-    inc a
-    ld (current_section), a
 
-    ld b, a
-    cp MAX_MODES
-    jr nz, change_mode
-
-    ; Last section has been processed, go back to the first section
-    xor a
-    ld (current_section), a
-    ld a, b
-
-change_mode:
-    dec a
-
-    push af
+    ; Save a
+    ld d, a
 
     ; Get the mode to apply to the section
     ld hl, modes_table
@@ -232,7 +222,15 @@ change_mode:
 
     ; Revert back to standard register set
     exx
-    pop af
+
+    ; Restore a    
+    ld a, d
+
+    ; Wait for the next HBL because changing border color takes effect
+    ; immediately but changing mode does not
+    rept 23
+        nop
+    endm
 
     ; Change border
     ld hl, borders_table
@@ -241,11 +239,22 @@ change_mode:
     add hl, bc
     ld a, (hl)
 
+    ; Select border color
     ld bc, 0x7f10
     out (c), c
+    
+    ; Change border color
     add 0x40
-    ld c, a
-    out (c), c
+    out (c), a
+
+    ; Update current section
+    ld a, (current_section)
+    inc a
+    cp MAX_MODES
+    jr nz, save_section
+    xor a
+save_section:
+    ld (current_section), a
 
     ret
 
