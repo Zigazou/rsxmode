@@ -8,7 +8,7 @@ Everything is usable in Basic and does not require Z80 assembly language nor
 hardware knowledge.
 
 It is based on the work of Brian Cadge published in Popular Computing Weekly.
-See [https://cpcrulez.fr/coding_src-list-RSX-mix_your_modes_POPU.htm]()
+See [https://cpcrulez.fr/coding_src-list-RSX-mix_your_modes_POPU.htm](https://cpcrulez.fr/coding_src-list-RSX-mix_your_modes_POPU.htm)
 
 It has been reverse engineered and patched to allow 664, 6128 and the plus
 family to run it. It is also able to change border color for each section.
@@ -26,14 +26,17 @@ Requirements
 
 In order to compile this program, you need:
 
-- **Zasm** compiler [http://k1.spdns.de/Develop/Projects/zasm/]()
+- **Zasm** compiler [http://k1.spdns.de/Develop/Projects/zasm/](http://k1.spdns.de/Develop/Projects/zasm/)
 
 If you want to generate a DSK file that you can use with a CPC emulator, you
 need:
 
-- **addamsdosheader** utility [https://github.com/Zigazou/addamsdosheader]()
-- **cpcxfs** (or cpcfs) [http://www.cpctech.org.uk/download.html]()
-- **caprice32** or another emulator [https://github.com/ColinPitrat/caprice32]()
+- **addamsdosheader** utility [https://github.com/Zigazou/addamsdosheader](https://github.com/Zigazou/addamsdosheader)
+- **cpcxfs** (or cpcfs) [http://www.cpctech.org.uk/download.html](http://www.cpctech.org.uk/download.html)
+- **caprice32** emulator [https://github.com/ColinPitrat/caprice32](https://github.com/ColinPitrat/caprice32)
+
+**Note**: the `rsxmode.dsk` included in this repository only works with Caprice32.
+You will need to regenerate another one if you want to use it in other emulators.
 
 Compile
 -------
